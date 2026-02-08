@@ -1,5 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from app.pdf_utils import extract_text_from_pdf
+from app.chunking import chunk_text
+from app.embeddings import generate_embeddings
 import os
 import uuid
 
@@ -36,6 +38,17 @@ async def upload_file(file: UploadFile = File(...)):
     text = extract_text_from_pdf(file_path)
     print("\n--- EXTRACTED TEXT SAMPLE ---\n")
     print(text[:1000])
+    print("\n--- END SAMPLE ---\n")
+    
+    chunks = chunk_text(text)
+
+    print(f"Total chunks created: {len(chunks)}")
+    print("\n--- SAMPLE CHUNK ---\n")
+    sample_chunk = chunks[0]["text"]
+    embedding = generate_embeddings(sample_chunk)
+    print(sample_chunk[:1000])
+    print("Embedding length: ", len(embedding))
+    print("First 10 values: ", embedding[:10])
     print("\n--- END SAMPLE ---\n")
     
     return {

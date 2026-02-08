@@ -1,0 +1,9 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Uploaded files
+backend/uploads/
+
+# Environment files
+.env
