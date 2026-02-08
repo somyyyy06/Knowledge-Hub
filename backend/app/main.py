@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from app.pdf_utils import extract_text_from_pdf
 from app.chunking import chunk_text
 from app.embeddings import generate_embeddings
+from app.vector_store import add_chunk_to_vector_store, query_vector_store
 import os
 import uuid
 
@@ -41,16 +42,19 @@ async def upload_file(file: UploadFile = File(...)):
     print("\n--- END SAMPLE ---\n")
     
     chunks = chunk_text(text)
-
     print(f"Total chunks created: {len(chunks)}")
-    print("\n--- SAMPLE CHUNK ---\n")
-    sample_chunk = chunks[0]["text"]
-    embedding = generate_embeddings(sample_chunk)
-    print(sample_chunk[:1000])
-    print("Embedding length: ", len(embedding))
-    print("First 10 values: ", embedding[:10])
-    print("\n--- END SAMPLE ---\n")
     
+    add_chunk_to_vector_store(chunks, document_id="doc1")
+    
+    question = "What is the transformer architecture?"
+    question_embedding = generate_embedding(question)
+    results = query_vector_store(question_embedding)
+    
+    print("\n--- RETRIEVED CHUNKS ---\n")
+    for doc in results["documents"][0]:
+        print(doc[:300])
+        print("-----")
+        
     return {
         "original_filename": file.filename,
         "stored_as": unique_filename,
