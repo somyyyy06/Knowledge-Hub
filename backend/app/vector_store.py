@@ -1,36 +1,63 @@
 import chromadb
 from chromadb.config import Settings
+from app.embeddings import generate_embeddings
 
-# Initialize Chroma client (local, persistent)
-client = chromadb.Client(
+# Persistent storage on disk
+chroma_client = chromadb.Client(
     Settings(
-        persist_directory="vector_store",
+        persist_directory="chroma_db",
         anonymized_telemetry=False
     )
 )
 
-# Create or get collection
-collection = client.get_or_create_collection(
-    name="knowledge_chunks"
+collection = chroma_client.get_or_create_collection(
+    name="documents"
 )
 
-def add_chunk_to_vector_store(chunks, document_id):
+
+def add_chunk_to_vector_store(chunks, document_id: str):
+    """
+    Stores chunks with metadata so multiple documents can coexist
+    """
+
+    documents = []
+    embeddings = []
+    metadatas = []
+    ids = []
+
     for chunk in chunks:
-        collection.add(
-            ids=[f"{document_id}_{chunk['chunk_id']}"], # unique id for each chunk
-            document = [chunk["text"]],
-            metadatas = [{
-                "document_id": document_id,
-                "chunk_id": chunk["chunk_id"],
-                "start_word": chunk["start_word"],
-                "end_word": chunk["end_word"]
-            }]
-        )
-        
-        
-def query_vector_store(query_embedding, top_k=3):
-    results = collection.query(
-        query_embedding=[query_embedding],
-        n_results=top_k
+        text = chunk["text"]
+        chunk_id = chunk["chunk_id"]
+
+        documents.append(text)
+        embeddings.append(generate_embeddings(text))
+        metadatas.append({
+            "document_id": document_id,
+            "chunk_id": chunk_id
+        })
+        ids.append(f"{document_id}_{chunk_id}")
+
+    collection.add(
+        documents=documents,
+        embeddings=embeddings,
+        metadatas=metadatas,
+        ids=ids
     )
+
+    chroma_client.persist()
+
+
+def query_vector_store(query_embedding, top_k=5, document_id=None):
+    where_filter = None
+    if document_id:
+        where_filter = {"document_id": document_id}
+
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=top_k,
+        where=where_filter,
+        include=["documents", "distances", "metadatas"]
+    )
+
     return results
+

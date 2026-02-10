@@ -3,8 +3,15 @@ from app.pdf_utils import extract_text_from_pdf
 from app.chunking import chunk_text
 from app.embeddings import generate_embeddings
 from app.vector_store import add_chunk_to_vector_store, query_vector_store
+from app.rag_prompt import build_rag_prompt
+from app.llm_client import call_llm
+from app.memory import get_history, add_to_history
 import os
 import uuid
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 app = FastAPI()
 
@@ -47,13 +54,33 @@ async def upload_file(file: UploadFile = File(...)):
     add_chunk_to_vector_store(chunks, document_id="doc1")
     
     question = "What is the transformer architecture?"
-    question_embedding = generate_embedding(question)
+    question_embedding = generate_embeddings(question)
     results = query_vector_store(question_embedding)
     
     print("\n--- RETRIEVED CHUNKS ---\n")
     for doc in results["documents"][0]:
         print(doc[:300])
         print("-----")
+        
+    
+    retrived_chunks = results["documents"][0]
+    
+    prompt = build_rag_prompt(
+        retrived_chunks, 
+        question=question
+    )
+    
+    print("\n--- FINAL RAG PROMPT ---\n")
+    print(prompt[:1500])
+    print("\n--- END PROMPT ---\n")
+
+    answer = call_llm(prompt)
+    
+
+    print("\n--- GEMINI ANSWER ---\n")
+    print(answer)
+    print("\n--- END ANSWER ---\n")
+    
         
     return {
         "original_filename": file.filename,
@@ -62,6 +89,33 @@ async def upload_file(file: UploadFile = File(...)):
         "message": "File uploaded successfully"
     }
 
+
+@app.post("/chat")
+async def chat(session_id: str, question: str):
+    """
+    Conversational RAG endpoint
+    """
+    
+    history = get_history(session_id)
+    question_embedding = generate_embeddings(question)
+    results = query_vector_store(question_embedding)
+    retrived_chunks = results["documents"][0][:3] # top 3 chunks
+    
+    prompt = build_rag_prompt(
+        context_chunks=retrived_chunks,
+        question=question,
+        history=history
+    )
+    
+    answer = call_llm(prompt)
+    
+    add_to_history(session_id, "user", question)
+    add_to_history(session_id, "assistant", answer)
+    
+    return {
+        "answer": answer,
+        "session_id": session_id
+    }
 
 
 @app.get("/health")
